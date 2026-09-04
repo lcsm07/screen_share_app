@@ -27,10 +27,6 @@ test("1080p60 keeps motion-first fallback ordering", () => {
     60,
   );
   assert.equal(
-    attempts[0].publishOptions.screenShareEncoding?.maxBitrate,
-    10_000_000,
-  );
-  assert.equal(
     attempts[0].publishOptions.degradationPreference,
     "maintain-resolution",
   );

@@ -87,7 +87,7 @@ export const SCREEN_SHARE_PROFILES: Record<
       backupCodec: false,
       simulcast: false,
       screenShareEncoding: {
-        maxBitrate: 10_000_000,
+        maxBitrate: 8_000_000,
         maxFramerate: 60,
         priority: "high",
       },

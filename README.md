@@ -1,120 +1,141 @@
 # ScreenShare Rooms
 
-Notas pessoais do MVP de compartilhamento de tela em tempo real.
+ScreenShare Rooms is a small, self-hostable WebRTC application for anonymous
+real-time screen sharing. Anyone can create a room, share its link, and join
+with a nickname—no account required.
 
-Salas anônimas, sem cadastro. Cada sala tem um código, compartilhamento de
-tela pelo navegador e chat via LiveKit.
+## Features
 
-## Stack
+- Browser-based screen sharing with quality presets up to 1080p60.
+- Optional screen-share audio when the browser and operating system provide it.
+- LiveKit WebRTC transport for low-latency video, audio, and chat.
+- Room chat and participant list.
+- Sender diagnostics for capture, encoder, bitrate, transport, and frame rate.
+- Fullscreen playback and responsive desktop/mobile layout.
+- Automatic cleanup of inactive rooms.
 
-- Next.js + React + TypeScript
+## Technology
+
+- Next.js, React, and TypeScript
 - Tailwind CSS
 - LiveKit / WebRTC
-- PostgreSQL + Prisma
-- Docker Compose
+- PostgreSQL and Prisma
+- Docker Compose for local services
 
-## Rodar localmente
+## Run locally
 
-Pré-requisitos: Node.js 20+ e Docker.
+### Prerequisites
+
+- Node.js 20 or newer
+- Docker and Docker Compose
+- A browser that supports `getDisplayMedia()`
+
+Screen sharing works only from `https://` or `http://localhost`.
+
+### 1. Install dependencies
 
 ```bash
 npm install
-neon env pull
-docker compose up -d livekit
+```
+
+### 2. Configure the local environment
+
+Create a `.env` file in the project root. These values match the development
+PostgreSQL and LiveKit services in `docker-compose.yml` and `livekit.yaml`:
+
+```dotenv
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/screenshare"
+DATABASE_URL_UNPOOLED="postgresql://postgres:postgres@localhost:5432/screenshare"
+LIVEKIT_URL="ws://localhost:7880"
+LIVEKIT_API_KEY="devkey"
+LIVEKIT_API_SECRET="devsecret-key-change-me"
+ROOM_INACTIVITY_TTL_SEC="3600"
+```
+
+If you use a hosted Neon database instead, populate the database variables
+with that project’s connection strings (the Neon CLI can also run
+`neon env pull`).
+
+### 3. Start the services and database
+
+```bash
+docker compose up -d postgres livekit
 npm run db:deploy
+```
+
+### 4. Start the application
+
+```bash
 npm run dev
 ```
 
-Abrir: <http://localhost:3000>
+Open <http://localhost:3000>, create a room, and share the generated link.
 
-O comando `neon env pull` preenche o `.env` com as variáveis do branch Neon
-vinculado. O arquivo `.env` é local e não deve ser commitado. As credenciais de
-`livekit.yaml` são somente para desenvolvimento local.
-
-## Comandos úteis
+## Useful commands
 
 ```bash
-npm run dev        # desenvolvimento
-npm run build      # build de produção
-npm run start      # inicia o build
-npm run lint       # ESLint
-npm run typecheck  # TypeScript
-npm test           # testes
-npm run check      # lint + tipos + testes + build
+npm run dev        # start the development server
+npm run build      # create a production build
+npm run start      # serve the production build
+npm run lint       # run ESLint
+npm run typecheck  # run TypeScript checks
+npm test           # run automated tests
+npm run check      # lint + typecheck + tests + build
 
-npm run db:deploy  # aplica migrations existentes
-npm run db:studio  # abre o Prisma Studio
-npm run db:push    # sincroniza o schema sem criar migration
+npm run db:deploy  # apply existing Prisma migrations
+npm run db:studio  # open Prisma Studio
+npm run db:push    # synchronize the schema without a migration
 ```
 
-## Variáveis principais
+## Configuration
 
-| Variável | Uso |
-|---|---|
-| `DATABASE_URL` | Conexão pooled do PostgreSQL |
-| `DATABASE_URL_UNPOOLED` | Conexão direta usada pelo Prisma |
-| `LIVEKIT_URL` | URL do servidor LiveKit |
-| `LIVEKIT_API_KEY` | Chave do LiveKit |
-| `LIVEKIT_API_SECRET` | Segredo do LiveKit |
-| `ROOM_INACTIVITY_TTL_SEC` | Tempo de expiração da sala |
-| `CRON_SECRET` | Protege a limpeza automática em produção |
-| `DEV_ALLOWED_ORIGINS` | Permite acesso ao dev server pela rede local |
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Pooled PostgreSQL connection used by Prisma |
+| `DATABASE_URL_UNPOOLED` | Direct PostgreSQL connection used for migrations |
+| `LIVEKIT_URL` | LiveKit WebSocket URL |
+| `LIVEKIT_API_KEY` | LiveKit API key |
+| `LIVEKIT_API_SECRET` | LiveKit API secret |
+| `ROOM_INACTIVITY_TTL_SEC` | Seconds before an inactive room is cleaned up |
+| `CRON_SECRET` | Protects the cleanup endpoint in production |
+| `DEV_ALLOWED_ORIGINS` | Optional comma-separated origins for LAN development |
 
-## Estrutura rápida
+Never commit `.env` files or real credentials.
 
-```text
-src/app/          páginas e rotas da API
-src/components/   interface e componentes LiveKit
-src/hooks/        hooks de chat e métricas
-src/lib/          LiveKit, Prisma, limpeza e utilitários
-src/types/        tipos compartilhados
-prisma/           schema e migrations
-tests/            testes automatizados
-```
+## Screen-share quality
 
-## Lembretes
+`1080p60` is the default high-motion target and can use up to approximately
+8 Mbps for the single video stream. `720p60`, `1080p30`, and `720p30` are
+available for slower hardware or constrained networks.
 
-- Compartilhamento de tela exige HTTPS ou `localhost`.
-- `1080p60` é o alvo padrão para movimento e pode usar até aproximadamente
-  10 Mbps no stream único; `720p60` continua disponível para hardware mais lento.
-- A captura fica limitada ao perfil escolhido, mas não é reduzida novamente por
-  uma segunda rotina da aplicação. Em `1080p60`, o WebRTC preserva a resolução e
-  reduz quadros primeiro quando não há bitrate suficiente.
-- A taxa solicitada é um alvo: a origem selecionada, o compositor do sistema,
-  o encoder, a rede e o decoder podem entregar menos de 10 Mbps ou 60 fps.
-- Use **Sender diagnostics** no menu de qualidade para abrir as métricas de
-  captura, encode, bitrate e rede em um modal.
-- A sala é anônima; o código funciona como acesso à sala.
-- O chat só habilita quando existe outro participante.
-- Salas inativas são removidas automaticamente.
-- Em produção, usar `wss://`, credenciais reais e TURN.
-- Nunca adicionar `.env` ou segredos reais ao Git.
+The selected resolution and frame rate are targets, not guarantees. The source
+surface, operating-system compositor, encoder, network, and receiver can all
+reduce the delivered frame rate or resolution. Use **Sender diagnostics** from
+the quality menu to see the live limitation reason.
 
-## Produção para 60 fps
+Screen-share audio is also controlled by the browser and operating system. The
+application keeps the video share active when no audio track is available.
 
-O arquivo `livekit.yaml` continua sendo apenas para desenvolvimento local. Use
-`livekit.prod.example.yaml` como base e injete chaves/certificados pelo gerenciador
-de segredos. Para evitar perda de qualidade por transporte:
+## Production notes
 
-- coloque o SFU perto dos usuários e prefira conexão direta por UDP;
-- libere UDP `50000-60000`, TCP `7881`, TURN/UDP `443` e TURN/TLS `443` em um
-  endpoint L4 dedicado;
-- em Linux/Docker, use host networking e ajuste os buffers UDP conforme os
-  avisos do LiveKit;
-- reserve pelo menos 12 Mbps estáveis de upload e download por compartilhamento
-  ativo para validar 1080p60 com folga;
-- monitore a porta Prometheus `6789` somente pela rede privada;
-- execute testes de carga antes de aumentar o número de espectadores. Uma sala
-  LiveKit precisa caber em um único nó.
+`livekit.yaml` is for local development only. Use
+`livekit.prod.example.yaml` as a starting point for production and provide
+secrets through your deployment platform.
 
-Critério de laboratório: após 10 segundos de aquecimento, captura, encode,
-decode e apresentação devem permanecer em pelo menos 55 fps em 95% das amostras
-de um segundo, com perda de pacotes abaixo de 1% e sem congelamentos maiores que
-250 ms.
+For reliable high-quality sharing:
 
-## Estado atual
+- Deploy the LiveKit server close to your users.
+- Prefer direct UDP media and configure TURN/UDP or TURN/TLS fallbacks.
+- Use `wss://` for browser signaling in production.
+- Reserve at least 12 Mbps of stable upload and download per active 1080p60
+  share when validating capacity.
+- Run load tests before increasing the number of viewers per room.
 
-MVP funcional. Ainda não há login, moderação de apresentadores, gravação ou
-salas persistentes.
+## Current scope
 
-Licença: MIT.
+This is an anonymous MVP. Authentication, moderation, recording, and persistent
+room history are not included yet.
+
+## License
+
+MIT

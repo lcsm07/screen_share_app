@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Env
+.env
+.env*.local
+
+# Prisma
+/prisma/migrations/dev.db*
+
+# Misc
+*.log
+.DS_Store
+*.pem
+coverage/
+.test-build/
+.vercel
+.idea/
+*.tsbuildinfo
+next-env.d.ts

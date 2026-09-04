@@ -1,0 +1,38 @@
+// Prisma schema — Screen Share Rooms MVP
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Sala anônima de compartilhamento de tela.
+model Room {
+  /// Identificador interno (cuid)
+  id String @id @default(cuid())
+
+  /// Código curto e único compartilhável (ex: A4B9XZ)
+  code String @unique
+
+  /// Nome opcional de exibição da sala
+  name String?
+
+  /// Sala ativa?
+  active Boolean @default(true)
+
+  /// Data de criação
+  createdAt DateTime @default(now())
+
+  /// Última atividade (join/heartbeat) — usada para limpeza por inatividade
+  lastActivityAt DateTime @default(now())
+
+  /// Data de expiração calculada (opcional)
+  expiresAt DateTime?
+
+  @@index([code])
+  @@map("rooms")
+}

@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: screenshare-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: screenshare
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d screenshare"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: screenshare-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    ports:
+      # Signaling (HTTP/WebSocket) — o navegador conecta aqui
+      - "7880:7880"
+      # TCP fallback para mídia
+      - "7881:7881"
+      # UDP para mídia (range enxuto p/ dev local)
+      - "50000-50020:50000-50020/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+volumes:
+  postgres_data:

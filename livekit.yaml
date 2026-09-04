@@ -1,0 +1,28 @@
+# Configuração DEV do LiveKit Server
+# Credenciais DEV — devem espelhar o .env (LIVEKIT_API_KEY / LIVEKIT_API_SECRET)
+# NÃO usar em produção.
+log_level: info
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50020
+  # Em dev local, não publicar IP externo
+  use_external_ip: false
+
+keys:
+  devkey: devsecret-key-change-me
+
+room:
+  # Remove salas vazias após 5 minutos sem participantes
+  empty_timeout: 300
+  # Grace period após o último participante sair (1h)
+  departure_timeout: 3600
+  enable_remote_unmute: true
+
+# Desativa integração com TURN (dev local)
+turn:
+  enabled: false

@@ -31,12 +31,20 @@ interface CaptureInfo {
   profile: ScreenShareQuality;
 }
 
+interface ShareControlsProps {
+  receivedAudioMuted: boolean;
+  onToggleReceivedAudio: () => void;
+}
+
 /**
  * Button to start/stop screen sharing for the local participant.
  * Uses localParticipant.setScreenShareEnabled() which internally calls
  * getDisplayMedia().
  */
-export function ShareControls() {
+export function ShareControls({
+  receivedAudioMuted,
+  onToggleReceivedAudio,
+}: ShareControlsProps) {
   const { localParticipant, isScreenShareEnabled } = useLocalParticipant();
   const [pending, setPending] = useState(false);
   const [audioPending, setAudioPending] = useState(false);
@@ -388,6 +396,33 @@ export function ShareControls() {
                 ? "Enable audio"
                 : "Mute audio"
               : "No audio"}
+          </span>
+        </Button>
+      )}
+      {!sharing && (
+        <Button
+          onClick={onToggleReceivedAudio}
+          variant="outline"
+          size="md"
+          title={
+            receivedAudioMuted
+              ? "Unmute received audio"
+              : "Mute received audio"
+          }
+          aria-label={
+            receivedAudioMuted
+              ? "Unmute received audio"
+              : "Mute received audio"
+          }
+          aria-pressed={receivedAudioMuted}
+        >
+          {receivedAudioMuted ? (
+            <VolumeX className="h-4 w-4" />
+          ) : (
+            <Volume2 className="h-4 w-4" />
+          )}
+          <span className="hidden sm:inline">
+            {receivedAudioMuted ? "Unmute audio" : "Mute audio"}
           </span>
         </Button>
       )}

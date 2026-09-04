@@ -26,6 +26,7 @@ export function RoomView({
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  const [receivedAudioMuted, setReceivedAudioMuted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<"chat" | "participants" | null>(
     "chat",
   );
@@ -59,7 +60,7 @@ export function RoomView({
 
   return (
     <div className="flex h-screen flex-col">
-      <RoomAudioRenderer />
+      <RoomAudioRenderer muted={receivedAudioMuted} />
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-4 backdrop-blur">
         <div className="flex items-center gap-3">
@@ -98,7 +99,12 @@ export function RoomView({
         {/* Main area: shared screen + controls */}
         <main className="flex min-h-0 min-w-0 flex-[3] flex-col">
           <ScreenShareView />
-          <ShareControls />
+          <ShareControls
+            receivedAudioMuted={receivedAudioMuted}
+            onToggleReceivedAudio={() =>
+              setReceivedAudioMuted((muted) => !muted)
+            }
+          />
         </main>
 
         {/* Sidebar */}

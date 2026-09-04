@@ -1,6 +1,6 @@
 # ScreenShare Rooms
 
-Plataforma de compartilhamento de tela em tempo real, inspirada no Watch2Gether.
+Plataforma de compartilhamento de tela em tempo real.
 Salas anônimas, sem cadastro — crie uma sala, compartilhe a tela e assista
 junto com sua equipe ou amigos, direto do navegador.
 
@@ -23,15 +23,16 @@ junto com sua equipe ou amigos, direto do navegador.
 # 1. Instale as dependências
 npm install
 
-# 2. Suba a infraestrutura (Postgres e LiveKit)
+# 2. Crie o arquivo de ambiente local
+cp .env.example .env
+
+# 3. Suba a infraestrutura (Postgres e LiveKit)
 docker compose up -d
 
-# 3. Aplique o schema no banco (cria as tabelas)
-npx prisma migrate dev --name init
-# ou, sem histórico de migrations:
-# npx prisma db push
+# 4. Aplique as migrations já versionadas
+npm run db:deploy
 
-# 4. Rode o app
+# 5. Rode o app
 npm run dev
 ```
 

@@ -10,8 +10,8 @@ build/
 dist/
 
 # Env
-.env
-.env*.local
+.env*
+!.env.example
 
 # Prisma
 /prisma/migrations/dev.db*
@@ -26,3 +26,7 @@ coverage/
 .idea/
 *.tsbuildinfo
 next-env.d.ts
+
+# Local agent/workspace metadata
+.agents/
+.codex/

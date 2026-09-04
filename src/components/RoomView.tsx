@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RoomAudioRenderer, useRoomContext } from "@livekit/components-react";
 import { LogOut, Copy, Check, Monitor } from "lucide-react";
@@ -30,6 +30,7 @@ export function RoomView({
   const [sidebarOpen, setSidebarOpen] = useState<"chat" | "participants" | null>(
     "chat",
   );
+  const screenShareViewportRef = useRef<HTMLDivElement | null>(null);
 
   // Keep the persistent room record alive while this client is connected.
   useEffect(() => {
@@ -59,7 +60,7 @@ export function RoomView({
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen h-dvh flex-col overflow-hidden">
       <RoomAudioRenderer muted={receivedAudioMuted} />
       {/* Top bar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-4 backdrop-blur">
@@ -95,12 +96,13 @@ export function RoomView({
       </header>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {/* Main area: shared screen + controls */}
-        <main className="flex min-h-0 min-w-0 flex-[3] flex-col">
-          <ScreenShareView />
+        <main className="flex min-h-0 min-w-0 flex-[3] flex-col overflow-hidden">
+          <ScreenShareView viewportRef={screenShareViewportRef} />
           <ShareControls
             receivedAudioMuted={receivedAudioMuted}
+            diagnosticsContainerRef={screenShareViewportRef}
             onToggleReceivedAudio={() =>
               setReceivedAudioMuted((muted) => !muted)
             }

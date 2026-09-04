@@ -7,9 +7,50 @@ import {
   type ScreenShareSenderStats,
 } from "@/lib/screenShare";
 
-const POLL_INTERVAL_MS = 2_000;
+const POLL_INTERVAL_MS = 1_000;
 
-/** Polls the local screen-share sender for the currently encoded layer. */
+type CounterSample = {
+  bytes?: number;
+  frames?: number;
+  totalTime?: number;
+  timestamp: number;
+};
+
+type RawStats = Record<string, unknown> & {
+  id: string;
+  type: string;
+  timestamp: number;
+  kind?: string;
+  mediaType?: string;
+  rid?: string;
+  remoteId?: string;
+  codecId?: string;
+  selectedCandidatePairId?: string;
+  state?: string;
+  nominated?: boolean;
+  localCandidateId?: string;
+  remoteCandidateId?: string;
+  protocol?: string;
+  candidateType?: string;
+  bytesSent?: number;
+  packetsSent?: number;
+  framesSent?: number;
+  framesEncoded?: number;
+  framesPerSecond?: number;
+  frameWidth?: number;
+  frameHeight?: number;
+  totalEncodeTime?: number;
+  qualityLimitationReason?: string;
+  availableOutgoingBitrate?: number;
+  currentRoundTripTime?: number;
+  roundTripTime?: number;
+  packetsLost?: number;
+  mimeType?: string;
+  encoderImplementation?: string;
+  powerEfficientEncoder?: boolean;
+};
+
+/** Polls capture, encoder, remote feedback, and transport stats for screen share. */
 export function useScreenShareStats(
   localParticipant: LocalParticipant,
   enabled: boolean,
@@ -19,10 +60,7 @@ export function useScreenShareStats(
   useEffect(() => {
     let disposed = false;
     let requestInFlight = false;
-    const previousStats = new Map<
-      string,
-      { frameCount: number; timestamp: number }
-    >();
+    const previous = new Map<string, CounterSample>();
 
     if (!enabled) {
       setStats([]);
@@ -36,58 +74,118 @@ export function useScreenShareStats(
         const publication = localParticipant.getTrackPublication(
           Track.Source.ScreenShare,
         );
-        const videoTrack = publication?.videoTrack;
-        const senderStats = videoTrack
-          ? await readScreenShareSenderStats(videoTrack)
-          : [];
-        if (!disposed) {
-          const normalized =
-            senderStats?.map(normalizeScreenShareSenderStats) ?? [];
-          const withDerivedFps = normalized.map((stat) => {
+        const report = await publication?.videoTrack?.getRTCStatsReport();
+        if (!report || disposed) return;
+
+        const all = new Map<string, RawStats>();
+        report.forEach((value) => {
+          const stat = value as RawStats;
+          all.set(stat.id, stat);
+        });
+
+        const source = [...all.values()].find(
+          (stat) =>
+            stat.type === "media-source" &&
+            (stat.kind === "video" || stat.mediaType === "video"),
+        );
+        const transport = [...all.values()].find(
+          (stat) => stat.type === "transport" && stat.selectedCandidatePairId,
+        );
+        const pair = transport?.selectedCandidatePairId
+          ? all.get(transport.selectedCandidatePairId)
+          : [...all.values()].find(
+              (stat) =>
+                stat.type === "candidate-pair" &&
+                stat.state === "succeeded" &&
+              stat.nominated,
+            );
+        const localCandidate = pair?.localCandidateId
+          ? all.get(pair.localCandidateId)
+          : undefined;
+        const remoteCandidate = pair?.remoteCandidateId
+          ? all.get(pair.remoteCandidateId)
+          : undefined;
+
+        const normalized = [...all.values()]
+          .filter(
+            (stat) =>
+              stat.type === "outbound-rtp" &&
+              (stat.kind === undefined || stat.kind === "video") &&
+              (stat.mediaType === undefined || stat.mediaType === "video"),
+          )
+          .map((stat) => {
+            const prior = previous.get(stat.id);
+            const elapsedSeconds = prior
+              ? (stat.timestamp - prior.timestamp) / 1000
+              : 0;
             const frameCount = stat.framesEncoded ?? stat.framesSent;
-            const prior = previousStats.get(stat.rid);
-            let observedFramesPerSecond: number | undefined;
-
-            if (
-              frameCount !== undefined &&
-              stat.timestamp !== undefined &&
-              prior &&
-              stat.timestamp > prior.timestamp
-            ) {
-              const elapsedSeconds = (stat.timestamp - prior.timestamp) / 1000;
-              const derived = (frameCount - prior.frameCount) / elapsedSeconds;
-              if (Number.isFinite(derived) && derived > 0) {
-                observedFramesPerSecond = derived;
-              }
-            }
-
-            if (frameCount !== undefined && stat.timestamp !== undefined) {
-              previousStats.set(stat.rid, {
-                frameCount,
-                timestamp: stat.timestamp,
-              });
-            }
-
-            // Browsers report zero while an encoding is paused or CPU
-            // constrained. Keep zero out of the UI; a positive observed
-            // delta is more useful than that placeholder value.
-            const advertisedFramesPerSecond =
-              stat.framesPerSecond !== undefined &&
-              stat.framesPerSecond > 0
-                ? stat.framesPerSecond
+            const framesDelta =
+              prior?.frames !== undefined && frameCount !== undefined
+                ? frameCount - prior.frames
                 : undefined;
+            const bytesDelta =
+              prior?.bytes !== undefined && stat.bytesSent !== undefined
+                ? stat.bytesSent - prior.bytes
+                : undefined;
+            const encodeTimeDelta =
+              prior?.totalTime !== undefined && stat.totalEncodeTime !== undefined
+                ? stat.totalEncodeTime - prior.totalTime
+                : undefined;
+            const observedFps =
+              framesDelta !== undefined && elapsedSeconds > 0
+                ? framesDelta / elapsedSeconds
+                : undefined;
+            const remote = stat.remoteId ? all.get(stat.remoteId) : undefined;
+            const codec = stat.codecId ? all.get(stat.codecId) : undefined;
 
-            return {
-              ...stat,
+            previous.set(stat.id, {
+              bytes: stat.bytesSent,
+              frames: frameCount,
+              totalTime: stat.totalEncodeTime,
+              timestamp: stat.timestamp,
+            });
+
+            return normalizeScreenShareSenderStats({
+              rid: stat.rid ?? stat.id,
+              frameWidth: stat.frameWidth,
+              frameHeight: stat.frameHeight,
               framesPerSecond:
-                observedFramesPerSecond ?? advertisedFramesPerSecond,
-            };
+                observedFps && observedFps > 0
+                  ? observedFps
+                  : stat.framesPerSecond,
+              sourceFramesPerSecond: source?.framesPerSecond,
+              framesSent: stat.framesSent,
+              framesEncoded: stat.framesEncoded,
+              bytesSent: stat.bytesSent,
+              bitrate:
+                bytesDelta !== undefined && elapsedSeconds > 0
+                  ? (bytesDelta * 8) / elapsedSeconds
+                  : undefined,
+              encodeTimePerFrameMs:
+                encodeTimeDelta !== undefined &&
+                framesDelta !== undefined &&
+                framesDelta > 0
+                  ? (encodeTimeDelta * 1000) / framesDelta
+                  : undefined,
+              timestamp: stat.timestamp,
+              qualityLimitationReason: stat.qualityLimitationReason,
+              availableOutgoingBitrate: pair?.availableOutgoingBitrate,
+              roundTripTime:
+                remote?.roundTripTime ?? pair?.currentRoundTripTime,
+              packetsSent: stat.packetsSent,
+              packetsLost: remote?.packetsLost,
+              transportProtocol: pair?.protocol ?? localCandidate?.protocol,
+              localCandidateType: localCandidate?.candidateType,
+              remoteCandidateType: remoteCandidate?.candidateType,
+              codec: codec?.mimeType,
+              encoderImplementation: stat.encoderImplementation,
+              powerEfficientEncoder: stat.powerEfficientEncoder,
+            });
           });
-          setStats(withDerivedFps);
-        }
+
+        if (!disposed) setStats(normalized);
       } catch {
-        // Stats can be unavailable briefly while a publication is changing.
-        // Keep the last successful sample instead of disrupting the share UI.
+        // Reports can disappear briefly while layers are enabled or disabled.
       } finally {
         requestInFlight = false;
       }
@@ -97,64 +195,10 @@ export function useScreenShareStats(
     const timer = window.setInterval(() => void poll(), POLL_INTERVAL_MS);
     return () => {
       disposed = true;
-      previousStats.clear();
+      previous.clear();
       window.clearInterval(timer);
     };
   }, [enabled, localParticipant]);
 
   return stats;
-}
-
-type RawOutboundVideoStats = RTCOutboundRtpStreamStats & {
-  id?: string;
-  kind?: string;
-  mediaType?: string;
-  type?: string;
-};
-
-/**
- * Reads raw outbound stats so framesEncoded is available on browsers where
- * framesSent or the advertised framesPerSecond temporarily drops to zero.
- */
-async function readScreenShareSenderStats(videoTrack: {
-  getRTCStatsReport: () => Promise<RTCStatsReport | undefined>;
-  getSenderStats?: () => Promise<
-    Array<{
-      rid: string;
-      frameWidth?: number;
-      frameHeight?: number;
-      framesPerSecond?: number;
-      framesSent?: number;
-      timestamp?: number;
-      qualityLimitationReason?: string;
-    }>
-  >;
-}) {
-  let report: RTCStatsReport | undefined;
-  try {
-    report = await videoTrack.getRTCStatsReport();
-  } catch {
-    report = undefined;
-  }
-
-  const rawStats: Array<RawOutboundVideoStats & { rid: string }> = [];
-  report?.forEach((value) => {
-    const stat = value as RawOutboundVideoStats;
-    const mediaKind = stat.kind ?? stat.mediaType;
-    if (
-      stat.type !== "outbound-rtp" ||
-      (mediaKind !== undefined && mediaKind !== "video")
-    ) {
-      return;
-    }
-
-    const rid = stat.rid ?? stat.id;
-    if (rid) rawStats.push({ ...stat, rid });
-  });
-
-  if (rawStats.length > 0) return rawStats;
-  if (typeof videoTrack.getSenderStats === "function") {
-    return videoTrack.getSenderStats();
-  }
-  return [];
 }

@@ -1,10 +1,10 @@
 import {
-  ScreenSharePresets,
+  VideoPreset,
   type ScreenShareCaptureOptions,
   type TrackPublishOptions,
 } from "livekit-client";
 
-export type ScreenShareQuality = "auto" | "balanced" | "data-saver";
+export type ScreenShareQuality = "1080p60" | "1080p30" | "720p60" | "720p30";
 
 export interface ScreenShareProfile {
   id: ScreenShareQuality;
@@ -18,35 +18,179 @@ export interface ScreenShareSenderStats {
   frameWidth?: number;
   frameHeight?: number;
   framesPerSecond?: number;
+  sourceFramesPerSecond?: number;
   framesSent?: number;
   framesEncoded?: number;
+  bytesSent?: number;
+  bitrate?: number;
+  encodeTimePerFrameMs?: number;
   timestamp?: number;
   qualityLimitationReason?: string;
+  availableOutgoingBitrate?: number;
+  roundTripTime?: number;
+  packetsSent?: number;
+  packetsLost?: number;
+  transportProtocol?: string;
+  localCandidateType?: string;
+  remoteCandidateType?: string;
+  codec?: string;
+  encoderImplementation?: string;
+  powerEfficientEncoder?: boolean;
+}
+
+const CAPTURE_TARGETS = {
+  "1080p": { width: 1920, height: 1080, frameRate: 60 },
+  "720p": { width: 1280, height: 720, frameRate: 60 },
+} as const;
+
+export const SCREEN_SHARE_PROFILES: Record<
+  ScreenShareQuality,
+  ScreenShareProfile
+> = {
+  "720p60": {
+    id: "720p60",
+    label: "720p60 · Smooth",
+    captureOptions: {
+      audio: true,
+      resolution: CAPTURE_TARGETS["720p"],
+      contentHint: "motion",
+      systemAudio: "include",
+    },
+    publishOptions: {
+      // A single H.264 stream gives Chromium the best chance of using its
+      // hardware encoder. Multiple 60 fps simulcast encodes can exhaust the
+      // 16.7 ms/frame budget even when bandwidth is plentiful.
+      videoCodec: "h264",
+      backupCodec: false,
+      simulcast: false,
+      screenShareEncoding: {
+        maxBitrate: 5_000_000,
+        maxFramerate: 60,
+        priority: "high",
+      },
+      // Discord-style compromise: let WebRTC trade some frames and some
+      // resolution instead of collapsing all the way to a tiny 60 fps layer.
+      degradationPreference: "balanced",
+    },
+  },
+  "1080p60": {
+    id: "1080p60",
+    label: "1080p60 · High motion",
+    captureOptions: {
+      audio: true,
+      resolution: CAPTURE_TARGETS["1080p"],
+      contentHint: "motion",
+      systemAudio: "include",
+    },
+    publishOptions: {
+      videoCodec: "h264",
+      backupCodec: false,
+      simulcast: false,
+      screenShareEncoding: {
+        maxBitrate: 10_000_000,
+        maxFramerate: 60,
+        priority: "high",
+      },
+      // Never turn a sharp 1080p source into an unreadable 480×270 stream.
+      // Under pressure Chromium must reduce frame rate before resolution.
+      degradationPreference: "maintain-resolution",
+    },
+  },
+  "1080p30": {
+    id: "1080p30",
+    label: "1080p30 · Sharp",
+    captureOptions: {
+      audio: true,
+      resolution: { width: 1920, height: 1080, frameRate: 30 },
+      contentHint: "detail",
+      systemAudio: "include",
+    },
+    publishOptions: {
+      videoCodec: "vp8",
+      backupCodec: false,
+      simulcast: true,
+      screenShareEncoding: {
+        maxBitrate: 5_000_000,
+        maxFramerate: 30,
+        priority: "high",
+      },
+      screenShareSimulcastLayers: [
+        new VideoPreset(640, 360, 600_000, 15, "high"),
+        new VideoPreset(1280, 720, 2_000_000, 30, "high"),
+      ],
+      degradationPreference: "maintain-resolution",
+    },
+  },
+  "720p30": {
+    id: "720p30",
+    label: "720p30 · Lower bandwidth",
+    captureOptions: {
+      audio: true,
+      resolution: { width: 1280, height: 720, frameRate: 30 },
+      contentHint: "motion",
+      systemAudio: "include",
+    },
+    publishOptions: {
+      videoCodec: "vp8",
+      backupCodec: false,
+      simulcast: true,
+      screenShareEncoding: {
+        maxBitrate: 2_000_000,
+        maxFramerate: 30,
+        priority: "high",
+      },
+      screenShareSimulcastLayers: [
+        new VideoPreset(640, 360, 500_000, 15, "high"),
+      ],
+      degradationPreference: "maintain-framerate",
+    },
+  },
+};
+
+const FALLBACK_ORDER: Record<ScreenShareQuality, ScreenShareQuality[]> = {
+  "1080p60": ["1080p60", "720p60", "1080p30", "720p30"],
+  "1080p30": ["1080p30", "720p30"],
+  "720p60": ["720p60", "720p30"],
+  "720p30": ["720p30"],
+};
+
+export function getScreenShareAttempts(
+  quality: ScreenShareQuality,
+): ScreenShareProfile[] {
+  return FALLBACK_ORDER[quality].map((id) => SCREEN_SHARE_PROFILES[id]);
+}
+
+export function isScreenShareConstraintError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "OverconstrainedError" ||
+      error.name === "ConstraintNotSatisfiedError")
+  );
 }
 
 /** Keeps only the sender fields needed by the share status UI. */
-export function normalizeScreenShareSenderStats(stats: {
-  rid: string;
-  frameWidth?: number;
-  frameHeight?: number;
-  framesPerSecond?: number;
-  framesSent?: number;
-  framesEncoded?: number;
-  timestamp?: number;
-  qualityLimitationReason?: string;
-}): ScreenShareSenderStats {
+export function normalizeScreenShareSenderStats(
+  stats: ScreenShareSenderStats,
+): ScreenShareSenderStats {
   const finite = (value: number | undefined) =>
     typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
   return {
-    rid: stats.rid,
+    ...stats,
     frameWidth: finite(stats.frameWidth),
     frameHeight: finite(stats.frameHeight),
     framesPerSecond: finite(stats.framesPerSecond),
+    sourceFramesPerSecond: finite(stats.sourceFramesPerSecond),
     framesSent: finite(stats.framesSent),
     framesEncoded: finite(stats.framesEncoded),
+    bytesSent: finite(stats.bytesSent),
+    bitrate: finite(stats.bitrate),
+    encodeTimePerFrameMs: finite(stats.encodeTimePerFrameMs),
     timestamp: finite(stats.timestamp),
-    qualityLimitationReason: stats.qualityLimitationReason,
+    availableOutgoingBitrate: finite(stats.availableOutgoingBitrate),
+    roundTripTime: finite(stats.roundTripTime),
+    packetsSent: finite(stats.packetsSent),
+    packetsLost: finite(stats.packetsLost),
   };
 }
 
@@ -70,89 +214,8 @@ export function selectActiveScreenShareStats(
     (a.frameWidth ?? 0) * (a.frameHeight ?? 0);
   const active = usable
     .filter(
-      (stat) =>
-        stat.framesPerSecond !== undefined && stat.framesPerSecond > 0,
+      (stat) => stat.framesPerSecond !== undefined && stat.framesPerSecond > 0,
     )
     .sort(byResolution);
   return (active[0] ?? [...usable].sort(byResolution)[0]) ?? null;
-}
-
-export const SCREEN_SHARE_PROFILES: Record<
-  ScreenShareQuality,
-  ScreenShareProfile
-> = {
-  auto: {
-    id: "auto",
-    label: "Auto · 1080p60",
-    captureOptions: {
-      audio: true,
-      resolution: { width: 1920, height: 1080, frameRate: 60 },
-      contentHint: "motion",
-      systemAudio: "include",
-    },
-    publishOptions: {
-      simulcast: true,
-      screenShareEncoding: { maxBitrate: 8_000_000, maxFramerate: 60 },
-      screenShareSimulcastLayers: [
-        ScreenSharePresets.h360fps15,
-        ScreenSharePresets.h720fps30,
-      ],
-      degradationPreference: "maintain-resolution",
-    },
-  },
-  balanced: {
-    id: "balanced",
-    label: "Balanced · 1080p30",
-    captureOptions: {
-      audio: true,
-      resolution: { width: 1920, height: 1080, frameRate: 30 },
-      contentHint: "detail",
-      systemAudio: "include",
-    },
-    publishOptions: {
-      simulcast: true,
-      screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
-      screenShareSimulcastLayers: [
-        ScreenSharePresets.h360fps15,
-        ScreenSharePresets.h720fps15,
-      ],
-      degradationPreference: "maintain-resolution",
-    },
-  },
-  "data-saver": {
-    id: "data-saver",
-    label: "Data saver · 720p15",
-    captureOptions: {
-      audio: true,
-      resolution: { width: 1280, height: 720, frameRate: 15 },
-      contentHint: "detail",
-      systemAudio: "include",
-    },
-    publishOptions: {
-      simulcast: true,
-      screenShareEncoding: ScreenSharePresets.h720fps15.encoding,
-      screenShareSimulcastLayers: [ScreenSharePresets.h360fps3],
-      degradationPreference: "maintain-resolution",
-    },
-  },
-};
-
-const FALLBACK_ORDER: Record<ScreenShareQuality, ScreenShareQuality[]> = {
-  auto: ["auto", "balanced", "data-saver"],
-  balanced: ["balanced", "data-saver"],
-  "data-saver": ["data-saver"],
-};
-
-export function getScreenShareAttempts(
-  quality: ScreenShareQuality,
-): ScreenShareProfile[] {
-  return FALLBACK_ORDER[quality].map((id) => SCREEN_SHARE_PROFILES[id]);
-}
-
-export function isScreenShareConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === "OverconstrainedError" ||
-      error.name === "ConstraintNotSatisfiedError")
-  );
 }

@@ -1,31 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Track } from "livekit-client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
+import {
+  RemoteTrackPublication,
+  Track,
+  VideoQuality,
+} from "livekit-client";
 import { useTracks, VideoTrack } from "@livekit/components-react";
 import { Maximize2, Minimize2, MonitorOff } from "lucide-react";
 
-/**
- * Renders the shared screen (local or remote) as the main element.
- * Uses useTracks([ScreenShare]) to get tracks published by any
- * participant.
- */
-export function ScreenShareView() {
-  // TrackReference[] — real tracks (published and subscribed)
+export function ScreenShareView({
+  viewportRef: externalViewportRef,
+}: {
+  viewportRef?: MutableRefObject<HTMLDivElement | null>;
+}) {
   const screenTracks = useTracks([Track.Source.ScreenShare], {
     onlySubscribed: true,
   });
   const viewportRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const setViewportRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      viewportRef.current = element;
+      if (externalViewportRef) externalViewportRef.current = element;
+    },
+    [externalViewportRef],
+  );
+
+  useEffect(() => {
+    screenTracks.forEach(({ publication }) => {
+      if (publication instanceof RemoteTrackPublication) {
+        publication.setVideoQuality(VideoQuality.HIGH);
+      }
+    });
+  }, [screenTracks]);
 
   useEffect(() => {
     const element = viewportRef.current;
-    const supported =
+    setFullscreenSupported(
       typeof document.exitFullscreen === "function" &&
-      typeof element?.requestFullscreen === "function";
-    setFullscreenSupported(supported);
-
+        typeof element?.requestFullscreen === "function",
+    );
     const handleFullscreenChange = () => {
       setIsFullscreen(document.fullscreenElement === viewportRef.current);
     };
@@ -46,7 +63,6 @@ export function ScreenShareView() {
   async function toggleFullscreen() {
     const element = viewportRef.current;
     if (!element || !fullscreenSupported) return;
-
     try {
       if (document.fullscreenElement === element) {
         await document.exitFullscreen();
@@ -60,24 +76,35 @@ export function ScreenShareView() {
   }
 
   return (
-    <div ref={viewportRef} className="relative min-h-0 flex-1 bg-black">
+    <div
+      ref={setViewportRef}
+      className="relative min-h-0 flex-1 overflow-hidden bg-black"
+    >
       {screenTracks.length > 0 ? (
         <>
           <div
             className={
               screenTracks.length === 1
-                ? "h-full"
+                ? "h-full w-full overflow-hidden"
                 : "grid h-full auto-rows-fr grid-cols-1 gap-px bg-zinc-800 lg:grid-cols-2"
             }
           >
             {screenTracks.map((track) => (
               <div
                 key={track.publication.trackSid}
-                className="relative min-h-0 min-w-0 bg-black"
+                className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-black"
               >
                 <VideoTrack
                   trackRef={track}
-                  className="h-full w-full object-contain"
+                  className="absolute inset-0 block h-full w-full object-contain"
+                  // Keep the source aspect ratio and show the complete shared
+                  // frame. Inline styling also makes this explicit against
+                  // LiveKit's screen-share media defaults.
+                  style={{
+                    objectFit: "contain",
+                    objectPosition: "center",
+                    backgroundColor: "transparent",
+                  }}
                 />
                 <div className="absolute left-3 top-3 rounded-md bg-black/60 px-2.5 py-1 text-xs text-zinc-200 backdrop-blur">
                   {track.participant.name ?? track.participant.identity} is sharing

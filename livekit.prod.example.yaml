@@ -1,0 +1,46 @@
+# Production template. Supply real keys and certificates through your secret
+# manager and do not commit the rendered configuration.
+port: 7880
+
+logging:
+  level: info
+  json: true
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+
+# Required for redundant/multi-node production deployments.
+redis:
+  address: redis.internal:6379
+
+keys:
+  <api-key>: <api-secret>
+
+# Scrape this port from the private monitoring network only.
+prometheus_port: 6789
+
+turn:
+  enabled: true
+  # Use a dedicated TURN hostname. For the broadest firewall compatibility,
+  # expose TCP 443 through an L4 endpoint and UDP 443 directly.
+  domain: turn.example.com
+  udp_port: 443
+  tls_port: 443
+  cert_file: /etc/livekit/certs/tls.crt
+  key_file: /etc/livekit/certs/tls.key
+
+room:
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
+    - mime: video/h264
+    - mime: video/vp8
+    - mime: video/vp9
+    - mime: video/av1
+    - mime: video/rtx
+  empty_timeout: 300
+  departure_timeout: 3600
+  enable_remote_unmute: true

@@ -8,12 +8,12 @@ import {
   SCREEN_SHARE_PROFILES,
 } from "../src/lib/screenShare";
 
-test("auto prefers 1080p60 and falls back progressively", () => {
-  const attempts = getScreenShareAttempts("auto");
+test("1080p60 keeps motion-first fallback ordering", () => {
+  const attempts = getScreenShareAttempts("1080p60");
 
   assert.deepEqual(
     attempts.map((profile) => profile.id),
-    ["auto", "balanced", "data-saver"],
+    ["1080p60", "720p60", "1080p30", "720p30"],
   );
   assert.deepEqual(attempts[0].captureOptions.resolution, {
     width: 1920,
@@ -22,17 +22,42 @@ test("auto prefers 1080p60 and falls back progressively", () => {
   });
   assert.equal(attempts[0].captureOptions.audio, true);
   assert.equal(attempts[0].captureOptions.systemAudio, "include");
-});
-
-test("data saver uses one low-bandwidth profile", () => {
-  assert.deepEqual(
-    getScreenShareAttempts("data-saver").map((profile) => profile.id),
-    ["data-saver"],
+  assert.equal(
+    attempts[0].publishOptions.screenShareEncoding?.maxFramerate,
+    60,
   );
   assert.equal(
-    SCREEN_SHARE_PROFILES["data-saver"].publishOptions.screenShareEncoding
+    attempts[0].publishOptions.screenShareEncoding?.maxBitrate,
+    10_000_000,
+  );
+  assert.equal(
+    attempts[0].publishOptions.degradationPreference,
+    "maintain-resolution",
+  );
+  assert.equal(attempts[0].publishOptions.videoCodec, "h264");
+  assert.equal(attempts[0].publishOptions.backupCodec, false);
+  assert.equal(attempts[0].publishOptions.simulcast, false);
+});
+
+test("720p60 uses the five megabit motion profile", () => {
+  const profile = SCREEN_SHARE_PROFILES["720p60"];
+
+  assert.equal(profile.publishOptions.screenShareEncoding?.maxBitrate, 5_000_000);
+  assert.equal(profile.publishOptions.screenShareEncoding?.maxFramerate, 60);
+  assert.equal(profile.captureOptions.contentHint, "motion");
+  assert.equal(profile.publishOptions.videoCodec, "h264");
+  assert.equal(profile.publishOptions.simulcast, false);
+});
+
+test("720p30 uses one low-bandwidth profile", () => {
+  assert.deepEqual(
+    getScreenShareAttempts("720p30").map((profile) => profile.id),
+    ["720p30"],
+  );
+  assert.equal(
+    SCREEN_SHARE_PROFILES["720p30"].publishOptions.screenShareEncoding
       ?.maxBitrate,
-    1_500_000,
+    2_000_000,
   );
 });
 

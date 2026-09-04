@@ -137,7 +137,7 @@ export function RoomGate({ code }: { code: string }) {
         connect
         audio={false}
         video={false}
-        options={{ dynacast: true, adaptiveStream: true }}
+        options={{ dynacast: true, adaptiveStream: false }}
         onDisconnected={() => {
           setToken(null);
           setServerUrl(null);

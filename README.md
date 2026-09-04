@@ -19,15 +19,16 @@ Pré-requisitos: Node.js 20+ e Docker.
 
 ```bash
 npm install
-cp .env.example .env
-docker compose up -d
+neon env pull
+docker compose up -d livekit
 npm run db:deploy
 npm run dev
 ```
 
 Abrir: <http://localhost:3000>
 
-O arquivo `.env` é local e não deve ser commitado. As credenciais de
+O comando `neon env pull` preenche o `.env` com as variáveis do branch Neon
+vinculado. O arquivo `.env` é local e não deve ser commitado. As credenciais de
 `livekit.yaml` são somente para desenvolvimento local.
 
 ## Comandos úteis
@@ -51,7 +52,7 @@ npm run db:push    # sincroniza o schema sem criar migration
 | Variável | Uso |
 |---|---|
 | `DATABASE_URL` | Conexão pooled do PostgreSQL |
-| `DIRECT_URL` | Conexão direta usada pelo Prisma |
+| `DATABASE_URL_UNPOOLED` | Conexão direta usada pelo Prisma |
 | `LIVEKIT_URL` | URL do servidor LiveKit |
 | `LIVEKIT_API_KEY` | Chave do LiveKit |
 | `LIVEKIT_API_SECRET` | Segredo do LiveKit |
